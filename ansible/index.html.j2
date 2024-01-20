@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Server Information</title>
+</head>
+<body>
+    <h1>Server Information</h1>
+    <p>Server Name: {{ server_name }}</p>
+    <p>Server IP: {{ server_ip }}</p>
+    <p>Server Time: <span id="server-time"></span></p>
+    <!-- Add more dynamic content as needed -->
+
+    <script>
+        // Function to update server time
+        function updateServerTime() {
+            var currentTime = new Date();
+            var hours = currentTime.getHours();
+            var minutes = currentTime.getMinutes();
+            var seconds = currentTime.getSeconds();
+            var formattedTime = hours + ":" + minutes + ":" + seconds;
+            document.getElementById("server-time").innerHTML = formattedTime;
+        }
+
+        // Update server time every second
+        setInterval(updateServerTime, 1000);
+
+        // Initial update
+        updateServerTime();
+    </script>
+</body>
+</html>

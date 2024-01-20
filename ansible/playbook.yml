@@ -1,0 +1,55 @@
+---
+- name: Configure Apache and Deploy HTML
+  hosts: all
+  become: yes
+
+  tasks:
+    - name: Update package cache and install Apache
+      apt:
+        name: apache2
+        state: latest
+
+    - name: Set timezone to Africa/Lagos
+      command: timedatectl set-timezone Africa/Lagos
+
+    - name: Install PHP and dependencies
+      apt:
+        name: "{{ item }}"
+        state: latest
+      loop:
+        - php
+        - libapache2-mod-php
+        - php-mysql
+        - php-cli
+        - php-common
+        - php-json
+        - php-opcache
+        - php-readline
+
+    - name: Create server-side script in Apache root directory
+      template:
+        src: server-info.php.j2
+        dest: /var/www/html/server-info.php
+        owner: www-data
+        group: www-data
+        mode: 0644
+
+    - name: Create HTML file with server info
+      template:
+        src: index.html.j2
+        dest: /var/www/html/index.html
+        owner: www-data
+        group: www-data
+        mode: 0644   
+
+    - name: Start Apache
+      service:
+        name: apache2
+        enabled: yes
+        state: started
+
+  handlers:
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
