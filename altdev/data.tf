@@ -1,9 +1,38 @@
-data "aws_availability_zones" "azs" {}
-
-data "external" "public_ips" {
-program = ["bash", "-c", "aws ec2 describe-instances --query 'Reservations[*].Instances[*].[PublicIpAddress]' --output json | jq -r 'to_entries | map(\"Instance-(.key)=(.value|@sh)\") | .[]' > host-inventory"]
-}
 
 data "aws_iam_role" "iam_role" {
-  name = "AWSServiceRoleForElasticLoadBalancing"
+  name = "awsec2admin"
+}
+
+data "aws_route53_zone" "selected" {
+  name         = var.domain_name
+  private_zone = false
+  vpc_id       = aws_vpc.main.id
+
+}
+
+
+data "aws_elb_service_account" "main" {}
+
+data "aws_ami" "amazon_linux" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["amzn2-ami-hvm-*-x86_64-ebs"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["amazon"]
+}
+
+data "aws_availability_zones" "available" {}
+
+data "aws_route53_zone" "main" {
+  name         = var.domain_name
+  private_zone = false
+  vpc_id       = aws_vpc.main.id
 }

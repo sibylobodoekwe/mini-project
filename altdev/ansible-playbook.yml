@@ -1,0 +1,28 @@
+---
+- hosts: ec2_instances
+  become: yes
+  tasks:
+    - name: Install Apache
+      yum:
+        name: httpd
+        state: present
+
+    - name: Set timezone to Africa/Lagos
+      command: timedatectl set-timezone Africa/Lagos
+
+    - name: Create a simple HTML page
+      blockinfile:
+        path: /var/www/html/index.html
+        create: yes
+        block: |
+          <html>
+            <body>
+              <h1>Hello from Terraform and Ansible!</h1>
+              <p>This is instance {{ inventory_hostname }}</p>
+            </body>
+          </html>
+
+    - name: Restart Apache
+      service:
+        name: httpd
+        state: restarted

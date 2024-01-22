@@ -1,70 +1,136 @@
-terraform {
-  required_providers {
-    aws = {
-      source              = "hashicorp/aws"
-      version             = "5.0"
-    }
-  }
-}
 provider "aws" {
-  region                  = "eu-west-1"
+  region = "eu-west-1"
 }
-resource "aws_vpc" "custom_vpc" {
-  cidr_block              = "10.0.0.0/16"
-  instance_tenancy        = var.instance_tenancy
-  enable_dns_support      = true
-  enable_dns_hostnames    = true
-}
+# Create a security group for the EC2 instances
+resource "aws_security_group" "ec2_sg" {
+  name        = "ec2_sg"
+  description = "Allow HTTP traffic"
+  vpc_id      = aws_vpc.main.id
 
-resource "aws_subnet" "public_subnet" {
-  count             = var.custom_vpc == "10.0.0.0/16" ? 3 : 0
-  vpc_id            = aws_vpc.custom_vpc.id
-  availability_zone = data.aws_availability_zones.azs.names[count.index]
-  cidr_block        = element(cidrsubnets(var.custom_vpc, 8, 4, 4), count.index)
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
-  tags = {
-    "Name" = "Public-Subnet-${count.index}"
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.custom_vpc.id
+# Create 3 EC2 instances
+# resource "aws_instance" "ec2_instances" {
+#   count = 3
 
-  tags = {
-    "Name" = "Internet-Gateway"
+#   ami           = "ami-0c55b159cbfafe1f0" # Amazon Linux 2 AMI
+#   instance_type = "t2.micro"
+#   key_name      = "altdevssh"
+#   subnet_id     = aws_subnet.public.id
+#   vpc_security_group_ids = [aws_security_group.ec2_sg.id]
+
+#   user_data = <<-EOF
+#               #!/bin/bash
+#               sudo yum update -y
+#               sudo amazon-linux-extras install -y lamp-mariadb10.2-php7.2 php7.2
+#               sudo yum install -y httpd
+#               sudo systemctl start httpd
+#               sudo systemctl enable httpd
+#               EOF
+
+#   tags = {
+#     Name = "ec2-instance-${count.index}"
+#   }
+# }
+
+# Create a security group for the Elastic Load Balancer
+resource "aws_security_group" "elb_sg" {
+  name        = "elb_sg"
+  description = "Allow HTTP traffic"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
 
-resource "aws_route_table" "public_rt" {
-  vpc_id = aws_vpc.custom_vpc.id
+# Create an Elastic Load Balancer
+resource "aws_elb" "elb" {
+  name            = "elb"
+  subnets         = aws_subnet.public.*.id
+  security_groups = [aws_security_group.elb_sg.id]
+
+  listener {
+    instance_port     = 80
+    instance_protocol = "http"
+    lb_port           = 80
+    lb_protocol       = "http"
+  }
+
+  health_check {
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+    timeout             = 3
+    interval            = 30
+    target              = "HTTP:80/"
+  }
+
+  instances = aws_instance.ec2_instances.*.id
+}
+
+# Create a custom Route53 domain
+resource "aws_route53_zone" "main" {
+  name = "ssibdev.com.ng"
 
   tags = {
-    "Name" = "Public-RouteTable"
+    Environment = "production"
   }
 }
 
-resource "aws_route" "public_route" {
-  route_table_id         = aws_route_table.public_rt.id
-  destination_cidr_block = "0.0.0.0/0"
-  gateway_id             = aws_internet_gateway.igw.id
-}
+# Create an Ansible script to install Apache and display a simple HTML page
+resource "local_file" "ansible_playbook" {
+  content  = <<-EOF
+    ---
+    - hosts: ec2_instances
+      become: yes
+      tasks:
+        - name: Install Apache
+          yum:
+            name: httpd
+            state: present
 
-resource "aws_route_table_association" "public_rt_association" {
-  count          = length(aws_subnet.public_subnet) == 3 ? 3 : 0
-  route_table_id = aws_route_table.public_rt.id
-  subnet_id      = element(aws_subnet.public_subnet.*.id, count.index)
-}
+        - name: Set timezone to Africa/Lagos
+          command: timedatectl set-timezone Africa/Lagos
 
-resource "aws_flow_log" "vpc_flow_log" {
-  iam_role_arn         = data.aws_iam_role.iam_role.arn
-  log_destination_type = "cloud-watch-logs"
-  log_destination      = aws_cloudwatch_log_group.cloudwatch_log_group.arn
-  traffic_type         = "ALL"
-  vpc_id               = aws_vpc.custom_vpc.id
-}
+        - name: Create a simple HTML page
+          blockinfile:
+            path: /var/www/html/index.html
+            create: yes
+            block: |
+              <html>
+                <body>
+                  <h1>Hello from Terraform and Ansible!</h1>
+                  <p>This is instance {{ inventory_hostname }}</p>
+                </body>
+              </html>
 
-resource "aws_cloudwatch_log_group" "cloudwatch_log_group" {
-  name              = "VPC-FlowLogs-Group"
-  retention_in_days = 30
+        - name: Restart Apache
+          service:
+            name: httpd
+            state: restarted
+          EOF
+  filename = "ansible-playbook.yml"
 }
-

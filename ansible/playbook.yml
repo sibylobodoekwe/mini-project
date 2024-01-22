@@ -1,55 +1,55 @@
 ---
-- name: Configure Apache and Deploy HTML
-  hosts: all
+- name: Provision and configure webservers
+  hosts: webservers
+  gather_facts: yes
   become: yes
 
-  tasks:
-    - name: Update package cache and install Apache
-      apt:
-        name: apache2
-        state: latest
+  vars:
+    html_content: |
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Terraform Test</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(to right, #ff9966, #ff5e62);
+          }
+          h1 {
+            font-size: 3em;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+          }
+        </style>
+      </head>
+      <body>
+        <h1>Welcome to {{ ansible_hostname }}!</h1>
+      </body>
+      </html>
 
-    - name: Set timezone to Africa/Lagos
+  roles:
+    - { role: geerlingguy.apache, httpd_packages: ['httpd'] }
+    - { role: amazon.aws.ec2_instance_info }
+
+  tasks:
+    - name: Set timezone
       command: timedatectl set-timezone Africa/Lagos
 
-    - name: Install PHP and dependencies
-      apt:
-        name: "{{ item }}"
-        state: latest
-      loop:
-        - php
-        - libapache2-mod-php
-        - php-mysql
-        - php-cli
-        - php-common
-        - php-json
-        - php-opcache
-        - php-readline
+    - name: Create index.html
+      blockinfile:
+        path: /var/www/html/index.html
+        create: yes
+        block: "{{ html_content }}"
 
-    - name: Create server-side script in Apache root directory
-      template:
-        src: server-info.php.j2
-        dest: /var/www/html/server-info.php
-        owner: www-data
-        group: www-data
-        mode: 0644
-
-    - name: Create HTML file with server info
-      template:
-        src: index.html.j2
-        dest: /var/www/html/index.html
-        owner: www-data
-        group: www-data
-        mode: 0644   
-
-    - name: Start Apache
+    - name: Reload Apache
       service:
-        name: apache2
-        enabled: yes
-        state: started
-
-  handlers:
-    - name: Restart Apache
-      service:
-        name: apache2
-        state: restarted
+        name: httpd
+        state: reloaded

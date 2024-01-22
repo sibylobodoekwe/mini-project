@@ -1,52 +1,24 @@
-
-variable "ami_id" {
-  description = "AMI ID for instances"
-  type        = string
-  default     = "ami-062a49a8152e4c031"
-}
-variable "custom_vpc" {
-  description = "VPC for testing environment"
-  type        = string
-  default     = "10.0.0.0/16"
+variable "aws_region" {
+  type    = string
+  default = "eu-west-1"
 }
 
-variable "instance_tenancy" {
-  description = "it defines the tenancy of VPC. Whether it's default or dedicated"
-  type        = string
-  default     = "default"
+variable "domain_name" {
+  type    = string
+  default = "ssibdev.com.ng"
 }
 
-variable "instance_type" {
-  description = "Instance type to create an instance"
-  type        = string
-  default     = "t2.micro"
+variable "subdomain_name" {
+  type    = string
+  default = "terraform-test"
 }
 
-variable "aws_key_pair" {
-  description = "PEM file of Keypair used to login to EC2 instances"
-  type        = string
-  default     = "altdev.pem" 
+variable "subnet_cidrs" {
+  type    = list(string)
+  default = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"] # Update with your desired CIDR blocks
 }
 
 variable "availability_zones" {
-  description   = "availability zone of the instance"
-  type          =  string
-  # default       = map(any)
-}
-variable "instance_count" {
- description = "Number of instances to create"
- type        = number
- default     = 3
-}
-
-variable "iam_instance_profile_name" {
-  description = "IAM instance profile name"
-  type        = string
-  default     = "default"  
-}
-
-variable "public_key_path" {
-  description = "Path to the public key file"
-  type        = string
-  default     = "altdev.pub"
+  type    = list(string)
+  default = ["eu-west-1a", "eu-west-1b", "eu-west-1c"] # Update with your desired availability zones
 }

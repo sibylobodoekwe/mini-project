@@ -1,66 +1,73 @@
-resource "aws_instance" "instance" {
-  count             = var.instance_count
-  ami               = var.ami_id
-  instance_type     = var.instance_type
-  subnet_id         = element(aws_subnet.public_subnet.*.id, count.index)
-  security_groups   = [aws_security_group.sg.id]
-  key_name        = aws_key_pair.key_name.key_name
-  iam_instance_profile = aws_iam_instance_profile.example.name
+
+resource "aws_instance" "ec2_instances" {
+  count                  = 3
+  ami                    = data.aws_ami.amazon_linux.id
+  instance_type          = "t2.micro"
+  key_name               = "altdevssh"
+  subnet_id              = element(aws_subnet.private.*.id, count.index)
+  vpc_security_group_ids = [aws_security_group.sg.id]
+
+  # user_data = <<-EOF
+  #             #!/bin/bash
+  #             sudo yum update -y
+  #             sudo yum install -y httpd
+  #             sudo systemctl start httpd
+  #             sudo systemctl enable httpd
+  #             EOF
 
   tags = {
-    "Name"        = "Instance-${count.index}"
-    "Environment" = "Test"
-    "CreatedBy"   = "Terraform"
+    Name = "ec2-instance-${count.index}"
+  }
 }
 
-  timeouts {
-    create = "10m"
+resource "aws_security_group" "sg" {
+  name        = "ec2-sg"
+  description = "Allow HTTP inbound traffic"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
-}
-resource "aws_key_pair" "key_name" {
-  key_name   = "key_name"
-  public_key = file("./altdev.pub")
-}
-
-resource "aws_iam_instance_profile" "example" {
-  name = "example-profile"
-}
-
-resource "null_resource" "null" {
-  count = length(aws_subnet.public_subnet.*.id)
-
-  provisioner "file" {
-    source      = "./userdata.sh"
-    destination = "/home/ec2-user/userdata.sh"
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
-
-  provisioner "remote-exec" {
-    inline = [
-      "chmod +x /home/ec2-user/userdata.sh",
-      "sh /home/ec2-user/userdata.sh",
-    ]
-    on_failure = continue
-  }
-
-  connection {
-    type        = "ssh"
-    user        = "ec2-user"
-    port        = "22"
-    host        = element(aws_eip.eip.*.public_ip, count.index)
-    private_key = file(var.aws_key_pair)
-  }
-
 }
 
-resource "aws_eip" "eip" {
-  count            = length(aws_instance.instance.*.id)
-  instance         = element(aws_instance.instance.*.id, count.index)
-  public_ipv4_pool = "amazon"
+resource "aws_subnet" "private" {
+  count             = 3
+  cidr_block        = cidrsubnet(aws_vpc.main.cidr_block, 8, count.index + 1)
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  vpc_id            = aws_vpc.main.id
 
   tags = {
-    "Name" = "EIP-${count.index}"
+    Name = "private-subnet-${count.index}"
   }
 }
 
+resource "aws_vpc" "main" {
+  cidr_block = "10.0.0.0/16"
 
+  tags = {
+    Name = "main-vpc"
+  }
+}
+
+resource "aws_subnet" "public" {
+  count = length(var.subnet_cidrs)
+
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = element(var.subnet_cidrs, count.index)
+  availability_zone       = element(var.availability_zones, count.index)
+  map_public_ip_on_launch = true
+
+  tags = {
+    Name = "Public Subnet ${count.index + 1}"
+  }
+}
